@@ -87,7 +87,9 @@ def main():
     """
 
     page_icon("💬")
-    st.subheader("Learn-it-all: education for all", divider="red", anchor=False)
+    st.title("Learn-it-all: education for all")
+
+    st.subheader("Tutors", divider="red", anchor=False)
 
     client = OpenAI(
         base_url="http://localhost:11434/v1",
@@ -136,48 +138,45 @@ def main():
     if "current_problem_index" not in st.session_state:
         st.session_state.current_problem_index = 0
 
-    # Title of the app
-    st.title("Code Problem Navigator")
-
-    # Display the current problem with Python syntax highlighting
-    st.write("### Current Code Problem:")
+    st.subheader("Playground", divider="red", anchor=False)
     current_problem = code_problems[st.session_state.current_problem_index]
     code_editor(current_problem, height=300, lang="python")
 
 
     # Navigation buttons
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)  # Create three columns for the buttons
+
     with col1:
         if st.button("Previous"):
-            # Move to the previous problem
             st.session_state.current_problem_index = (st.session_state.current_problem_index - 1) % len(code_problems)
             st.experimental_rerun()  # Refresh the app to show the previous problem
 
     with col2:
+        if st.button("Submit"):
+            # Prepare the prompt for the LLM
+            prompt = f"Given the original code: ```{current_problem}```, please check if the code is correct and provide suggestions for improvement if needed. Limit your answer to 100 words."
+
+            # Send the prompt to the LLM
+            try:
+                with st.spinner("Checking your code..."):
+                    stream = client.chat.completions.create(
+                        model=selected_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        stream=True,
+                    )
+                    # Stream the response
+                    response = st.write_stream(stream)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+            except Exception as e:
+                st.error(e, icon="⛔️")
+
+    with col3:
         if st.button("Next"):
-            # Move to the next problem
             st.session_state.current_problem_index = (st.session_state.current_problem_index + 1) % len(code_problems)
             st.experimental_rerun()  # Refresh the app to show the next problem
 
-    # Submit button to check the edited code
-    if st.button("Submit"):
-        # Prepare the prompt for the LLM
-        prompt = f"Given the original code: ```{current_problem}```, please check if the code is correct and provide suggestions for improvement if needed. Limit your answer to 100 words."
 
-        # Send the prompt to the LLM
-        try:
-            with st.spinner("Checking your code..."):
-                stream = client.chat.completions.create(
-                    model=selected_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    stream=True,
-                )
-                # Stream the response
-                response = st.write_stream(stream)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-        except Exception as e:
-            st.error(e, icon="⛔️")
-
+    st.subheader("Chat with tutor", divider="red", anchor=False)
     message_container = st.container(height=500, border=True)
 
     if "messages" not in st.session_state:
@@ -189,7 +188,10 @@ def main():
             st.markdown(message["content"])
 
     if prompt := st.chat_input("Enter a prompt here..."):
-        full_prompt = f"Given the code: ```{code_problems[st.session_state.current_problem_index]}```, {prompt}. Limit your answer in text only and 100 words."
+        if prompt.startswith("[tutor]"):
+            full_prompt = f"Given the code: ```{code_problems[st.session_state.current_problem_index]}```, {prompt}. Limit your answer in text only and 100 words."
+        else:
+            full_prompt = prompt
         try:
             st.session_state.messages.append({"role": "user", "content": full_prompt})
 
